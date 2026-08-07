@@ -1,0 +1,8 @@
+[package]
+name = "my_prompt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mlua = { version = "0.9", features = ["luajit"] }
+unicode-width = "0.2.2"
