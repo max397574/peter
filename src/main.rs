@@ -1,4 +1,4 @@
-use mlua::Lua;
+use mlua::{Lua, UserData, UserDataFields};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -6,9 +6,26 @@ use std::process::Command;
 use std::time::Instant;
 
 use unicode_width::UnicodeWidthChar;
-mod component;
-mod components;
-use components::JJContext;
+
+struct JjContext {
+    change_id: String,
+    files_added: u32,
+    files_modified: u32,
+    files_deleted: u32,
+    files_conflict: u32,
+    description: String,
+}
+
+impl UserData for JjContext {
+    fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("change_id", |_, this| Ok(this.change_id.clone()));
+        fields.add_field_method_get("files_added", |_, this| Ok(this.files_added));
+        fields.add_field_method_get("files_modified", |_, this| Ok(this.files_modified));
+        fields.add_field_method_get("files_deleted", |_, this| Ok(this.files_deleted));
+        fields.add_field_method_get("files_conflict", |_, this| Ok(this.files_conflict));
+        fields.add_field_method_get("description", |_, this| Ok(this.description.clone()));
+    }
+}
 
 pub fn display_width(s: &str) -> usize {
     let mut width = 0;
@@ -152,7 +169,7 @@ fn main() -> mlua::Result<()> {
             }
         }
 
-        Ok(Some(JJContext {
+        Ok(Some(JjContext {
             change_id,
             files_added,
             files_modified,
