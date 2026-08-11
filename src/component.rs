@@ -2,6 +2,45 @@ use mlua::{FromLua, IntoLua, Lua, LuaSerdeExt, Value as LuaValue};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
+pub use my_prompt_macros::LuaAnnotated;
+
+/// Implemented (via `#[derive(LuaAnnotated)]`) by any struct usable as a
+/// component's `D` (data) or `C` (config) type, so the registry can
+/// generate a LuaCATS `---@class` block for it - field names, types,
+/// and doc comments, all pulled from the Rust struct definition rather
+/// than hand-written. `full_name` is the fully-qualified Lua class name
+/// to emit (e.g. "MyPrompt.Cwd.Config") - supplied by the caller, since
+/// a bare `CwdConfig` struct has no idea which component name it'll end
+/// up registered under.
+pub trait LuaAnnotated {
+    fn lua_class_def(full_name: &str) -> String;
+}
+
+// `()` is used as the default C for components with no config (see
+// Component<D, C = ()>) - it needs a LuaAnnotated impl too so
+// ErasedComponent's bound is satisfiable, but there's nothing to
+// annotate: emit an empty class with no fields.
+impl LuaAnnotated for () {
+    fn lua_class_def(full_name: &str) -> String {
+        format!("---@class {full_name}")
+    }
+}
+
+// Components whose data may be entirely absent (e.g. jj's D is
+// Option<JJData> - None when the cwd isn't a jj repo) still want a real
+// annotation for the *present* case. The Lua-facing shape is the same
+// either way (a table with these fields, or nil) - LuaCATS doesn't need
+// a distinct class for "maybe absent", so this just delegates to T's own
+// class def unchanged. (The `?` that would mark it optional belongs on
+// the *field* referencing this type, e.g. `---@field data T.Data?` -
+// not on the class definition itself, so there's nothing extra to add
+// here.)
+impl<T: LuaAnnotated> LuaAnnotated for Option<T> {
+    fn lua_class_def(full_name: &str) -> String {
+        T::lua_class_def(full_name)
+    }
+}
+
 pub struct Context {
     pub cwd: PathBuf,
     pub term_width: usize,
@@ -220,12 +259,19 @@ pub trait ErasedComponent {
     fn set_lua_render(&mut self, f: mlua::Function);
     fn config_to_lua(&self, lua: &Lua) -> mlua::Result<LuaValue>;
     fn set_config_from_lua(&mut self, lua: &Lua, value: LuaValue) -> mlua::Result<()>;
+    /// Generates the LuaCATS annotation block for this component: its
+    /// data class, its config class, a component class combining both,
+    /// and the `---@overload` line `get_component` needs for this
+    /// component's name. `pascal_name` is this component's registered
+    /// name (e.g. "cwd"), converted to PascalCase (e.g. "Cwd") - shared
+    /// across the class names and the overload's string literal.
+    fn lua_annotations(&self, pascal_name: &str) -> String;
 }
 
 impl<D, C> ErasedComponent for Component<D, C>
 where
-    D: Clone + Serialize + 'static,
-    C: Serialize + serde::de::DeserializeOwned + 'static,
+    D: Clone + Serialize + 'static + LuaAnnotated,
+    C: Serialize + serde::de::DeserializeOwned + 'static + LuaAnnotated,
 {
     fn name(&self) -> &str {
         &self.name
@@ -264,6 +310,43 @@ where
         self.config = lua.from_value(value)?;
         Ok(())
     }
+
+    fn lua_annotations(&self, pascal_name: &str) -> String {
+        let config_class = format!("MyPrompt.{pascal_name}.Config");
+        let data_class = format!("MyPrompt.{pascal_name}.Data");
+        let component_class = format!("MyPrompt.{pascal_name}.Component");
+
+        let config_def = C::lua_class_def(&config_class);
+        let data_def = D::lua_class_def(&data_class);
+
+        format!(
+            "{config_def}\n\n\
+             {data_def}\n\n\
+             ---@class {component_class}\n\
+             ---@field config {config_class}\n\
+             ---@field render fun(data: {data_class}): {{ [1]: string, [2]: string}}[]\n\n\
+             ---@overload fun(name: \"{name}\"): {component_class}",
+            name = self.name,
+        )
+    }
+}
+
+/// Converts a component's registered snake_case/lowercase name (e.g.
+/// "cwd", "jj") into PascalCase (e.g. "Cwd", "Jj") for use in generated
+/// Lua class names, matching the MyPrompt.Cwd.Config style. Splits on
+/// '_' and '-' as word boundaries; a name with neither (like "cwd") is
+/// treated as one word and just gets its first letter capitalized.
+pub fn to_pascal_case(name: &str) -> String {
+    name.split(['_', '-'])
+        .filter(|w| !w.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect()
 }
 
 pub struct LuaComponent {
@@ -299,5 +382,20 @@ impl ErasedComponent for LuaComponent {
 
     fn set_config_from_lua(&mut self, _lua: &Lua, _value: LuaValue) -> mlua::Result<()> {
         Ok(())
+    }
+
+    fn lua_annotations(&self, pascal_name: &str) -> String {
+        // No D/C types exist for a purely Lua-defined component (both
+        // get_data and render are raw Lua functions, nothing to
+        // introspect), so this only emits the component class + overload
+        // line, with `data`/`config` left untyped.
+        let component_class = format!("MyPrompt.{pascal_name}.Component");
+        format!(
+            "---@class {component_class}\n\
+             ---@field config any\n\
+             ---@field render fun(data: any): {{ [1]: string, [2]: string}}[]\n\n\
+             ---@overload fun(name: \"{name}\"): {component_class}",
+            name = self.name,
+        )
     }
 }

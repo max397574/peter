@@ -9,6 +9,32 @@ pub struct Registry {
     order: Vec<String>,
 }
 
+fn header() -> String {
+    format!(
+        "-- LuaCATS type annotations for my_prompt, generated from the\n\
+         -- Rust component definitions - do not edit by hand, regenerate\n\
+         -- with `my_prompt --generate-annotations <path>`.\n\
+         --\n\
+         \n\
+         ---@type integer Exit status of the last command\n\
+         _G.last_status = 0\n\
+         ---@type string Current shell bind mode (e.g. \"insert\", \"visual\", \"default\")\n\
+         _G.bind_mode = \"\"\n\
+         ---@type boolean True when the shell is redrawing the prompt for history\n\
+         --- (e.g. Fish transient prompt), rather than a fresh render\n\
+         _G.is_transient = false\n\
+         ---@type integer Terminal width in columns, for \"{ALIGN_MARKER}\" padding\n\
+         _G.term_width = 0\n\
+         \n\
+         ---@return string current working directory\n\
+         function _G.get_cwd() end\n\
+         \n\
+         ---@param text string\n\
+         ---@return integer display width of `text`, ANSI escapes excluded\n\
+         function _G.displaywidth(text) end\n"
+    )
+}
+
 impl Registry {
     pub fn new() -> Self {
         Self {
@@ -31,6 +57,41 @@ impl Registry {
 
     pub fn get_mut(&mut self, name: &str) -> Option<&mut Box<dyn ErasedComponent>> {
         self.components.get_mut(name)
+    }
+
+    pub fn generate_lua_annotations(&self) -> String {
+        let mut class_blocks = Vec::new();
+        let mut overload_lines = Vec::new();
+
+        for name in &self.order {
+            let component = self
+                .components
+                .get(name)
+                .expect("order stays in sync with components");
+            let pascal_name = crate::component::to_pascal_case(name);
+            let block = component.lua_annotations(&pascal_name);
+
+            let (classes, overload) = block
+                .rsplit_once('\n')
+                .expect("lua_annotations always ends with a distinct ---@overload line");
+            class_blocks.push(classes.to_string());
+            overload_lines.push(overload.to_string());
+        }
+
+        let name_union = self
+            .order
+            .iter()
+            .map(|n| format!("\"{n}\""))
+            .collect::<Vec<_>>()
+            .join("|");
+
+        format!(
+            "{}\n{}\n\n---@alias MyPrompt.ComponentName {name_union}\n\n\
+     {}\n---@param name MyPrompt.ComponentName\n---@return any\nfunction _G.get_component(name) end\n",
+            header(),
+            class_blocks.join("\n\n"),
+            overload_lines.join("\n"),
+        )
     }
 }
 

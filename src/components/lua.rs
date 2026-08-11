@@ -1,10 +1,9 @@
-use mlua_extras::Typed;
 use std::process::Command;
 
-use crate::component::{Color, Component, Context, Segment};
+use crate::component::{Color, Component, Context, LuaAnnotated, Segment};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize, Typed)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum LuaType {
     Lua,
     LuaJIT,
@@ -19,7 +18,7 @@ impl LuaType {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Typed)]
+#[derive(Clone, Serialize, Deserialize, LuaAnnotated)]
 #[serde(default)]
 pub struct LuaConfig {
     pub lua_type: LuaType,
@@ -33,7 +32,7 @@ impl Default for LuaConfig {
     }
 }
 
-#[derive(Clone, Serialize, Typed)]
+#[derive(Clone, Serialize, LuaAnnotated)]
 pub struct LuaData {
     pub version: String,
 }

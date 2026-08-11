@@ -1,14 +1,15 @@
-use crate::component::{Color, Component, Context, Dynamic, Segment};
+use crate::component::{Color, Component, Context, Dynamic, LuaAnnotated, Segment};
 use serde::Serialize;
 use std::process::Command;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, LuaAnnotated)]
 pub struct JJData {
     pub change_id: String,
     pub files_added: u32,
     pub files_modified: u32,
     pub files_deleted: u32,
     pub files_conflict: u32,
+    /// First line of the current change's description
     pub description: String,
 }
 

@@ -1,9 +1,9 @@
 use std::process::Command;
 
-use crate::component::{Color, Component, Context, Segment};
+use crate::component::{Color, Component, Context, LuaAnnotated, Segment};
 use serde::Serialize;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, LuaAnnotated)]
 pub struct RustData {
     pub version: String,
 }

@@ -68,6 +68,33 @@ fn skip_escape_sequence(chars: &mut std::iter::Peekable<impl Iterator<Item = cha
 fn main() -> mlua::Result<()> {
     let start = Instant::now();
     let args: Vec<String> = env::args().collect();
+
+    let mut registry = Registry::new();
+    registry.register(Box::new(components::jj::component()));
+    registry.register(Box::new(components::cwd::component()));
+    registry.register(Box::new(components::lua::component()));
+    registry.register(Box::new(components::rust::component()));
+
+    // `my_prompt --generate-annotations [output_path]` writes the
+    // LuaCATS type stubs for every registered component and exits,
+    // rather than rendering a prompt. Kept as an early special case
+    // (not folded into the normal arg parsing below, which assumes
+    // args[1] is an integer last_status) since this is a one-off dev
+    // command, not something the shell invokes on every prompt render.
+    if args.get(1).map(String::as_str) == Some("--generate-annotations") {
+        let annotations = registry.generate_lua_annotations();
+        match args.get(2) {
+            Some(path) => {
+                fs::write(path, annotations).map_err(|e| {
+                    mlua::Error::RuntimeError(format!("failed to write {path}: {e}"))
+                })?;
+                eprintln!("wrote annotations to {path}");
+            }
+            None => print!("{annotations}"),
+        }
+        return Ok(());
+    }
+
     let last_status: i32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
     let bind_mode = args.get(2).cloned().unwrap_or_else(|| "insert".to_string());
     let term_width: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(80);
@@ -96,12 +123,6 @@ fn main() -> mlua::Result<()> {
     lua.globals().set("bind_mode", ctx.bind_mode.clone())?;
     lua.globals().set("is_transient", ctx.is_transient)?;
     lua.globals().set("term_width", ctx.term_width)?;
-
-    let mut registry = Registry::new();
-    registry.register(Box::new(components::jj::component()));
-    registry.register(Box::new(components::cwd::component()));
-    registry.register(Box::new(components::lua::component()));
-    registry.register(Box::new(components::rust::component()));
 
     let home_dir = env::var("HOME").expect("HOME environment variable must be set");
     let init_path = PathBuf::from(home_dir).join(".config/my_prompt/init.lua");
