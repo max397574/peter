@@ -83,9 +83,6 @@ fn main() -> mlua::Result<()> {
 
     let lua = Lua::new();
 
-    // Kept as globals for now since the old init.lua calls them directly
-    // (get_cwd(), displaywidth(...)). New config code should prefer
-    // reading these off components instead where possible.
     let get_cwd = lua.create_function(|_, ()| {
         let cwd = env::current_dir().unwrap_or_default();
         Ok(cwd.to_string_lossy().into_owned())
@@ -103,7 +100,8 @@ fn main() -> mlua::Result<()> {
     let mut registry = Registry::new();
     registry.register(Box::new(components::jj::component()));
     registry.register(Box::new(components::cwd::component()));
-    // Future built-ins (mode, etc.) get registered here too.
+    registry.register(Box::new(components::lua::component()));
+    registry.register(Box::new(components::rust::component()));
 
     let home_dir = env::var("HOME").expect("HOME environment variable must be set");
     let init_path = PathBuf::from(home_dir).join(".config/my_prompt/init.lua");

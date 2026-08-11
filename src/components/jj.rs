@@ -94,14 +94,10 @@ fn get_jj_data(_ctx: &Context, _config: &()) -> Option<JJData> {
 }
 
 fn render_jj(data: &Option<JJData>) -> Vec<Segment> {
-    // Unwrap-or-return: matches the reference config's `if jj then ...`
-    // branch - nothing is drawn when not in a jj repo.
     let Some(data) = data else {
         return Vec::new();
     };
 
-    // Hex equivalents of the reference config's ANSI-256 indices
-    // (69, 140, 163, 250, 238, 71), picked to match visually.
     let c_blue = Color::from_hex("#5FAFFF").unwrap();
     let c_purple = Color::from_hex("#AF87D7").unwrap();
     let c_magenta = Color::from_hex("#D787D7").unwrap();
@@ -138,6 +134,6 @@ fn render_jj(data: &Option<JJData>) -> Vec<Segment> {
 
 pub fn component() -> Component<Option<JJData>, ()> {
     let mut c = Component::new("jj", get_jj_data, render_jj);
-    c.enabled = Dynamic::dynamic(|_ctx| jj_root_exists());
+    c.enabled = Dynamic::new_dyn(|_ctx| jj_root_exists());
     c
 }
