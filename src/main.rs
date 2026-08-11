@@ -1,31 +1,17 @@
-use mlua::{Lua, UserData, UserDataFields};
+use mlua::Lua;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 use std::time::Instant;
 
 use unicode_width::UnicodeWidthChar;
 
-struct JjContext {
-    change_id: String,
-    files_added: u32,
-    files_modified: u32,
-    files_deleted: u32,
-    files_conflict: u32,
-    description: String,
-}
+mod component;
+mod components;
+mod registry;
 
-impl UserData for JjContext {
-    fn add_fields<'lua, F: UserDataFields<'lua, Self>>(fields: &mut F) {
-        fields.add_field_method_get("change_id", |_, this| Ok(this.change_id.clone()));
-        fields.add_field_method_get("files_added", |_, this| Ok(this.files_added));
-        fields.add_field_method_get("files_modified", |_, this| Ok(this.files_modified));
-        fields.add_field_method_get("files_deleted", |_, this| Ok(this.files_deleted));
-        fields.add_field_method_get("files_conflict", |_, this| Ok(this.files_conflict));
-        fields.add_field_method_get("description", |_, this| Ok(this.description.clone()));
-    }
-}
+use component::{Context, render_segments};
+use registry::Registry;
 
 pub fn display_width(s: &str) -> usize {
     let mut width = 0;
@@ -87,12 +73,19 @@ fn main() -> mlua::Result<()> {
     let term_width: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(80);
     let is_transient = args.get(4).is_some_and(|s| s == "transient");
 
-    let lua = Lua::new();
-    lua.globals().set("last_status", last_status)?;
-    lua.globals().set("bind_mode", bind_mode)?;
-    lua.globals().set("is_transient", is_transient)?;
-    lua.globals().set("term_width", term_width)?;
+    let ctx = Context {
+        cwd: env::current_dir().unwrap_or_default(),
+        term_width,
+        last_status,
+        bind_mode,
+        is_transient,
+    };
 
+    let lua = Lua::new();
+
+    // Kept as globals for now since the old init.lua calls them directly
+    // (get_cwd(), displaywidth(...)). New config code should prefer
+    // reading these off components instead where possible.
     let get_cwd = lua.create_function(|_, ()| {
         let cwd = env::current_dir().unwrap_or_default();
         Ok(cwd.to_string_lossy().into_owned())
@@ -102,93 +95,28 @@ fn main() -> mlua::Result<()> {
     let displaywidth = lua.create_function(|_, text: String| Ok(display_width(&text)))?;
     lua.globals().set("displaywidth", displaywidth)?;
 
-    let get_jj_info = lua.create_function(|_, ()| {
-        let root_check = Command::new("jj")
-            .args(["--ignore-working-copy", "root"])
-            .output();
+    lua.globals().set("last_status", ctx.last_status)?;
+    lua.globals().set("bind_mode", ctx.bind_mode.clone())?;
+    lua.globals().set("is_transient", ctx.is_transient)?;
+    lua.globals().set("term_width", ctx.term_width)?;
 
-        if root_check.is_err() || !root_check.unwrap().status.success() {
-            return Ok(None);
-        }
-
-        let diff_output = Command::new("jj")
-            .args(["diff", "--summary", "--ignore-working-copy"])
-            .output();
-
-        let mut files_added = 0;
-        let mut files_modified = 0;
-        let mut files_deleted = 0;
-        let mut files_conflict = 0;
-
-        if let Ok(output) = diff_output {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines() {
-                if line.starts_with("A ") {
-                    files_added += 1;
-                } else if line.starts_with("M ") {
-                    files_modified += 1;
-                } else if line.starts_with("D ") {
-                    files_deleted += 1;
-                } else if line.starts_with("C ") {
-                    files_conflict += 1;
-                }
-            }
-        }
-
-        let log_output = Command::new("jj")
-            .args([
-                "log",
-                "--revisions",
-                "@",
-                "--no-graph",
-                "--ignore-working-copy",
-                "--limit",
-                "1",
-                "--template",
-                r#"separate("\n", change_id.shortest(4), description)"#,
-            ])
-            .output();
-
-        let mut change_id = String::from("????");
-        let mut description = String::from("(no description set)");
-
-        if let Ok(output) = log_output {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let lines: Vec<&str> = stdout.lines().collect();
-            if let Some(id) = lines.first() {
-                let trimmed = id.trim();
-                if !trimmed.is_empty() {
-                    change_id = trimmed.to_string();
-                }
-            }
-            if lines.len() > 1 {
-                let desc = lines[1..].join("\n").trim().to_string();
-                if !desc.is_empty() {
-                    description = desc;
-                }
-            }
-        }
-
-        Ok(Some(JjContext {
-            change_id,
-            files_added,
-            files_modified,
-            files_deleted,
-            files_conflict,
-            description,
-        }))
-    })?;
-
-    lua.globals().set("get_jj_info", get_jj_info)?;
+    let mut registry = Registry::new();
+    registry.register(Box::new(components::jj::component()));
+    // Future built-ins (cwd, mode, etc.) get registered here too.
 
     let home_dir = env::var("HOME").expect("HOME environment variable must be set");
     let init_path = PathBuf::from(home_dir).join(".config/my_prompt/init.lua");
 
     let prompt_string: String = if init_path.exists() {
         let lua_code = fs::read_to_string(init_path).unwrap_or_default();
-        lua.load(&lua_code).eval()?
+        let rendered = registry::run_config(&lua, &mut registry, &ctx, &lua_code)?;
+        rendered
+            .iter()
+            .map(|segments| render_segments(segments))
+            .collect::<Vec<_>>()
+            .join("")
     } else {
-        String::from("\x1b[31m(config missing)\x1b[0m ❯ ")
+        String::from("\x1b[31m(config missing)\x1b[0m \u{276f} ")
     };
 
     let execution_time = start.elapsed();
