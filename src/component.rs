@@ -184,29 +184,32 @@ pub fn render_segments(segments: &[Segment]) -> String {
 }
 
 // ---------------------------------------------------------------------
-// Component<D>: the concrete, typed component definition Rust code
-// builds. `render_override` is filled in by Lua via ErasedComponent's
+// Component<D, C>: the concrete, typed component definition Rust code
+// builds. `D` is the data a render function consumes; `C` is this
+// component's config (depth, substitutions, whatever the component
+// wants) - Rust defines C's default via `Default`, Lua may read/edit it
+// via the snapshot table's `.config` field before init.lua returns.
+//
+// `render_override` is filled in by Lua via ErasedComponent's
 // set_lua_render; when present it wins over the Rust `render` closure,
 // but `get_data` is always the Rust closure - Lua never replaces how a
 // *built-in* component's data is fetched, only how it's displayed.
 // ---------------------------------------------------------------------
 
-pub struct Component<D> {
+pub struct Component<D, C = ()> {
     pub name: String,
     pub enabled: Dynamic<bool>,
-    pub get_data: Box<dyn Fn(&Context) -> D>,
+    pub get_data: Box<dyn Fn(&Context, &C) -> D>,
     pub render: Box<dyn Fn(&D) -> Vec<Segment>>,
+    pub config: C,
     pub file_patterns: Vec<String>,
-    // mlua 0.10 dropped the 'lua lifetime (Function now holds a weak ref
-    // to Lua internally), so this can just be stored directly - no
-    // RegistryKey indirection needed.
     render_override: Option<mlua::Function>,
 }
 
-impl<D> Component<D> {
+impl<D, C: Default> Component<D, C> {
     pub fn new(
         name: impl Into<String>,
-        get_data: impl Fn(&Context) -> D + 'static,
+        get_data: impl Fn(&Context, &C) -> D + 'static,
         render: impl Fn(&D) -> Vec<Segment> + 'static,
     ) -> Self {
         Self {
@@ -214,15 +217,17 @@ impl<D> Component<D> {
             enabled: Dynamic::Static(true),
             get_data: Box::new(get_data),
             render: Box::new(render),
+            config: C::default(),
             file_patterns: Vec::new(),
             render_override: None,
         }
     }
 }
 
-/// Type-erased handle so the registry can hold `Component<JJData>`,
-/// `Component<CwdData>`, etc. uniformly, and so Lua can install a render
-/// override without the registry itself needing to be generic.
+/// Type-erased handle so the registry can hold `Component<JJData, ()>`,
+/// `Component<CwdData, CwdConfig>`, etc. uniformly, and so Lua can
+/// install a render override or a config value without the registry
+/// itself needing to be generic.
 pub trait ErasedComponent {
     fn name(&self) -> &str;
     fn is_enabled(&self, ctx: &Context) -> bool;
@@ -234,11 +239,21 @@ pub trait ErasedComponent {
     /// affects rendering; `get_data` (for Rust-defined components) is
     /// untouched.
     fn set_lua_render(&mut self, f: mlua::Function);
+    /// This component's current config, serialized for the snapshot
+    /// table's `.config` field. `()` (the default C) serializes to an
+    /// empty table, which is harmless for components with no config.
+    fn config_to_lua(&self, lua: &Lua) -> mlua::Result<LuaValue>;
+    /// Overwrite this component's config from whatever Lua left in the
+    /// snapshot table's `.config` field. Called unconditionally after
+    /// init.lua returns - components with no config just deserialize
+    /// `()` from `()`, a no-op.
+    fn set_config_from_lua(&mut self, lua: &Lua, value: LuaValue) -> mlua::Result<()>;
 }
 
-impl<D> ErasedComponent for Component<D>
+impl<D, C> ErasedComponent for Component<D, C>
 where
     D: Clone + Serialize + 'static,
+    C: Serialize + serde::de::DeserializeOwned + 'static,
 {
     fn name(&self) -> &str {
         &self.name
@@ -249,7 +264,7 @@ where
     }
 
     fn render(&self, ctx: &Context, lua: &Lua) -> mlua::Result<Vec<Segment>> {
-        let data = (self.get_data)(ctx);
+        let data = (self.get_data)(ctx, &self.config);
         match &self.render_override {
             Some(f) => {
                 // serde -> LuaValue, instead of a hand-written IntoLua impl
@@ -265,6 +280,15 @@ where
     fn set_lua_render(&mut self, f: mlua::Function) {
         self.render_override = Some(f);
     }
+
+    fn config_to_lua(&self, lua: &Lua) -> mlua::Result<LuaValue> {
+        lua.to_value(&self.config)
+    }
+
+    fn set_config_from_lua(&mut self, lua: &Lua, value: LuaValue) -> mlua::Result<()> {
+        self.config = lua.from_value(value)?;
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -275,7 +299,7 @@ where
 
 pub struct LuaComponent {
     pub name: String,
-    pub get_data: mlua::Function,
+    pub get_data: Option<mlua::Function>,
     pub render: mlua::Function,
 }
 
@@ -292,11 +316,25 @@ impl ErasedComponent for LuaComponent {
     }
 
     fn render(&self, _ctx: &Context, _lua: &Lua) -> mlua::Result<Vec<Segment>> {
-        let data: LuaValue = self.get_data.call(())?;
+        let data: LuaValue = match &self.get_data {
+            Some(f) => f.call(())?,
+            None => LuaValue::Nil,
+        };
         self.render.call::<Vec<Segment>>(data)
     }
 
     fn set_lua_render(&mut self, f: mlua::Function) {
         self.render = f;
+    }
+
+    fn config_to_lua(&self, _lua: &Lua) -> mlua::Result<LuaValue> {
+        Ok(LuaValue::Nil)
+    }
+
+    fn set_config_from_lua(&mut self, _lua: &Lua, _value: LuaValue) -> mlua::Result<()> {
+        // Lua-defined components have no Rust-side config slot - any
+        // config they want lives in whatever their get_data closure
+        // already captured from init.lua's local scope.
+        Ok(())
     }
 }

@@ -10,7 +10,7 @@ mod component;
 mod components;
 mod registry;
 
-use component::{Context, render_segments};
+use component::Context;
 use registry::Registry;
 
 pub fn display_width(s: &str) -> usize {
@@ -102,19 +102,15 @@ fn main() -> mlua::Result<()> {
 
     let mut registry = Registry::new();
     registry.register(Box::new(components::jj::component()));
-    // Future built-ins (cwd, mode, etc.) get registered here too.
+    registry.register(Box::new(components::cwd::component()));
+    // Future built-ins (mode, etc.) get registered here too.
 
     let home_dir = env::var("HOME").expect("HOME environment variable must be set");
     let init_path = PathBuf::from(home_dir).join(".config/my_prompt/init.lua");
 
     let prompt_string: String = if init_path.exists() {
         let lua_code = fs::read_to_string(init_path).unwrap_or_default();
-        let rendered = registry::run_config(&lua, &mut registry, &ctx, &lua_code)?;
-        rendered
-            .iter()
-            .map(|segments| render_segments(segments))
-            .collect::<Vec<_>>()
-            .join("")
+        registry::run_config(&lua, &mut registry, &ctx, &lua_code, display_width)?
     } else {
         String::from("\x1b[31m(config missing)\x1b[0m \u{276f} ")
     };

@@ -20,7 +20,7 @@ fn jj_root_exists() -> bool {
         .unwrap_or(false)
 }
 
-fn get_jj_data(_ctx: &Context) -> Option<JJData> {
+fn get_jj_data(_ctx: &Context, _config: &()) -> Option<JJData> {
     if !jj_root_exists() {
         return None;
     }
@@ -136,7 +136,7 @@ fn render_jj(data: &Option<JJData>) -> Vec<Segment> {
     segs
 }
 
-pub fn component() -> Component<Option<JJData>> {
+pub fn component() -> Component<Option<JJData>, ()> {
     let mut c = Component::new("jj", get_jj_data, render_jj);
     c.enabled = Dynamic::dynamic(|_ctx| jj_root_exists());
     c
