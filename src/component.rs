@@ -4,40 +4,32 @@ use std::path::{Path, PathBuf};
 
 pub use my_prompt_macros::LuaAnnotated;
 
-/// Implemented (via `#[derive(LuaAnnotated)]`) by any struct usable as a
-/// component's `D` (data) or `C` (config) type, so the registry can
-/// generate a LuaCATS `---@class` block for it - field names, types,
-/// and doc comments, all pulled from the Rust struct definition rather
-/// than hand-written. `full_name` is the fully-qualified Lua class name
-/// to emit (e.g. "MyPrompt.Cwd.Config") - supplied by the caller, since
-/// a bare `CwdConfig` struct has no idea which component name it'll end
-/// up registered under.
 pub trait LuaAnnotated {
     fn lua_class_def(full_name: &str) -> String;
+
+    /// Definitions this type depends on that aren't `full_name` itself -
+    /// e.g. a `---@alias` for an enum field, or another struct's
+    /// `---@class`. Default is empty (most types have no nested
+    /// dependencies); the derive macro overrides this automatically for
+    /// any struct with a non-primitive field type.
+    fn nested_defs() -> Vec<String> {
+        Vec::new()
+    }
 }
 
-// `()` is used as the default C for components with no config (see
-// Component<D, C = ()>) - it needs a LuaAnnotated impl too so
-// ErasedComponent's bound is satisfiable, but there's nothing to
-// annotate: emit an empty class with no fields.
 impl LuaAnnotated for () {
     fn lua_class_def(full_name: &str) -> String {
         format!("---@class {full_name}")
     }
 }
 
-// Components whose data may be entirely absent (e.g. jj's D is
-// Option<JJData> - None when the cwd isn't a jj repo) still want a real
-// annotation for the *present* case. The Lua-facing shape is the same
-// either way (a table with these fields, or nil) - LuaCATS doesn't need
-// a distinct class for "maybe absent", so this just delegates to T's own
-// class def unchanged. (The `?` that would mark it optional belongs on
-// the *field* referencing this type, e.g. `---@field data T.Data?` -
-// not on the class definition itself, so there's nothing extra to add
-// here.)
 impl<T: LuaAnnotated> LuaAnnotated for Option<T> {
     fn lua_class_def(full_name: &str) -> String {
         T::lua_class_def(full_name)
+    }
+
+    fn nested_defs() -> Vec<String> {
+        T::nested_defs()
     }
 }
 
@@ -316,26 +308,38 @@ where
         let data_class = format!("MyPrompt.{pascal_name}.Data");
         let component_class = format!("MyPrompt.{pascal_name}.Component");
 
+        // Nested types (e.g. an enum used as a config field) get their
+        // own definition emitted once each, before the classes that
+        // reference them - deduplicated by exact text so a type
+        // referenced from both D and C isn't emitted twice.
+        let mut nested_defs: Vec<String> = Vec::new();
+        for def in C::nested_defs().into_iter().chain(D::nested_defs()) {
+            if !nested_defs.contains(&def) {
+                nested_defs.push(def);
+            }
+        }
+        let nested_block = if nested_defs.is_empty() {
+            String::new()
+        } else {
+            format!("{}\n\n", nested_defs.join("\n\n"))
+        };
+
         let config_def = C::lua_class_def(&config_class);
         let data_def = D::lua_class_def(&data_class);
 
         format!(
-            "{config_def}\n\n\
+            "{nested_block}\
+             {config_def}\n\n\
              {data_def}\n\n\
              ---@class {component_class}\n\
              ---@field config {config_class}\n\
-             ---@field render fun(data: {data_class}): {{ [1]: string, [2]: string}}[]\n\n\
+             ---@field render fun(data: {data_class}): MyPrompt.Segment[]\n\n\
              ---@overload fun(name: \"{name}\"): {component_class}",
             name = self.name,
         )
     }
 }
 
-/// Converts a component's registered snake_case/lowercase name (e.g.
-/// "cwd", "jj") into PascalCase (e.g. "Cwd", "Jj") for use in generated
-/// Lua class names, matching the MyPrompt.Cwd.Config style. Splits on
-/// '_' and '-' as word boundaries; a name with neither (like "cwd") is
-/// treated as one word and just gets its first letter capitalized.
 pub fn to_pascal_case(name: &str) -> String {
     name.split(['_', '-'])
         .filter(|w| !w.is_empty())
@@ -385,15 +389,11 @@ impl ErasedComponent for LuaComponent {
     }
 
     fn lua_annotations(&self, pascal_name: &str) -> String {
-        // No D/C types exist for a purely Lua-defined component (both
-        // get_data and render are raw Lua functions, nothing to
-        // introspect), so this only emits the component class + overload
-        // line, with `data`/`config` left untyped.
         let component_class = format!("MyPrompt.{pascal_name}.Component");
         format!(
             "---@class {component_class}\n\
              ---@field config any\n\
-             ---@field render fun(data: any): {{ [1]: string, [2]: string}}[]\n\n\
+             ---@field render fun(data: any): MyPrompt.Segment[]\n\n\
              ---@overload fun(name: \"{name}\"): {component_class}",
             name = self.name,
         )

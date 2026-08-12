@@ -3,7 +3,7 @@ use std::process::Command;
 use crate::component::{Color, Component, Context, LuaAnnotated, Segment};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, LuaAnnotated)]
 pub enum LuaType {
     Lua,
     LuaJIT,

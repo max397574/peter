@@ -10,29 +10,27 @@ pub struct Registry {
 }
 
 fn header() -> String {
-    format!(
-        "-- LuaCATS type annotations for my_prompt, generated from the\n\
-         -- Rust component definitions - do not edit by hand, regenerate\n\
-         -- with `my_prompt --generate-annotations <path>`.\n\
-         --\n\
+    "-- Type annotations for my_prompt, generated from Rust components\n\
+         -- Don't edit manually, regenerate with `my_prompt --generate-annotations <path>`.\n\
          \n\
          ---@type integer Exit status of the last command\n\
          _G.last_status = 0\n\
          ---@type string Current shell bind mode (e.g. \"insert\", \"visual\", \"default\")\n\
          _G.bind_mode = \"\"\n\
-         ---@type boolean True when the shell is redrawing the prompt for history\n\
-         --- (e.g. Fish transient prompt), rather than a fresh render\n\
+         ---@type boolean\n\
          _G.is_transient = false\n\
-         ---@type integer Terminal width in columns, for \"{ALIGN_MARKER}\" padding\n\
+         ---@type integer Terminal width in columns\n\
          _G.term_width = 0\n\
          \n\
-         ---@return string current working directory\n\
+         ---@return string Current working directory\n\
          function _G.get_cwd() end\n\
          \n\
          ---@param text string\n\
-         ---@return integer display width of `text`, ANSI escapes excluded\n\
-         function _G.displaywidth(text) end\n"
-    )
+         ---@return integer Display width of `text`\n\
+         function _G.displaywidth(text) end\n\
+         \n\
+         ---@alias MyPrompt.Segment { [1]: string, [2]: string }"
+        .to_string()
 }
 
 impl Registry {
@@ -64,16 +62,11 @@ impl Registry {
         let mut overload_lines = Vec::new();
 
         for name in &self.order {
-            let component = self
-                .components
-                .get(name)
-                .expect("order stays in sync with components");
+            let component = self.components.get(name).expect("Inconsitent registry");
             let pascal_name = crate::component::to_pascal_case(name);
             let block = component.lua_annotations(&pascal_name);
 
-            let (classes, overload) = block
-                .rsplit_once('\n')
-                .expect("lua_annotations always ends with a distinct ---@overload line");
+            let (classes, overload) = block.rsplit_once('\n').unwrap();
             class_blocks.push(classes.to_string());
             overload_lines.push(overload.to_string());
         }
