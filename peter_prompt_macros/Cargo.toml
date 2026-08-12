@@ -1,5 +1,5 @@
 [package]
-name = "my_prompt_macros"
+name = "peter_prompt_macros"
 version = "0.1.0"
 edition = "2024"
 

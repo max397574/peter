@@ -221,7 +221,7 @@ fn derive_struct(
     // call - a doc comment containing a stray '{' or '}' would otherwise
     // corrupt or panic a nested format! call. The same CwdConfig type
     // doesn't know it'll be registered as "Cwd"; the registry supplies
-    // the component's name and composes the full "MyPrompt.Cwd.Config"
+    // the component's name and composes the full "Peter.Cwd.Config"
     // class name when it calls lua_class_def.
     let template = format!("{class_doc_line}---@class {{{{FULL_NAME}}}}\n{fields_block}");
 

@@ -2,7 +2,7 @@ use mlua::{FromLua, IntoLua, Lua, LuaSerdeExt, Value as LuaValue};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
-pub use my_prompt_macros::LuaAnnotated;
+pub use peter_prompt_macros::LuaAnnotated;
 
 pub trait LuaAnnotated {
     fn lua_class_def(full_name: &str) -> String;
@@ -304,9 +304,9 @@ where
     }
 
     fn lua_annotations(&self, pascal_name: &str) -> String {
-        let config_class = format!("MyPrompt.{pascal_name}.Config");
-        let data_class = format!("MyPrompt.{pascal_name}.Data");
-        let component_class = format!("MyPrompt.{pascal_name}.Component");
+        let config_class = format!("Peter.{pascal_name}.Config");
+        let data_class = format!("Peter.{pascal_name}.Data");
+        let component_class = format!("Peter.{pascal_name}.Component");
 
         // Nested types (e.g. an enum used as a config field) get their
         // own definition emitted once each, before the classes that
@@ -333,7 +333,7 @@ where
              {data_def}\n\n\
              ---@class {component_class}\n\
              ---@field config {config_class}\n\
-             ---@field render fun(data: {data_class}): MyPrompt.Segment[]\n\n\
+             ---@field render fun(data: {data_class}): Peter.Segment[]\n\n\
              ---@overload fun(name: \"{name}\"): {component_class}",
             name = self.name,
         )
@@ -389,11 +389,11 @@ impl ErasedComponent for LuaComponent {
     }
 
     fn lua_annotations(&self, pascal_name: &str) -> String {
-        let component_class = format!("MyPrompt.{pascal_name}.Component");
+        let component_class = format!("Peter.{pascal_name}.Component");
         format!(
             "---@class {component_class}\n\
              ---@field config any\n\
-             ---@field render fun(data: any): MyPrompt.Segment[]\n\n\
+             ---@field render fun(data: any): Peter.Segment[]\n\n\
              ---@overload fun(name: \"{name}\"): {component_class}",
             name = self.name,
         )

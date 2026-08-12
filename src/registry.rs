@@ -10,7 +10,8 @@ pub struct Registry {
 }
 
 fn header() -> String {
-    "-- Type annotations for my_prompt, generated from Rust components\n\
+    "---@meta\n\
+         -- Type annotations for Peter, generated from Rust components\n\
          -- Don't edit manually, regenerate with `my_prompt --generate-annotations <path>`.\n\
          \n\
          ---@type integer Exit status of the last command\n\
@@ -29,7 +30,7 @@ fn header() -> String {
          ---@return integer Display width of `text`\n\
          function _G.displaywidth(text) end\n\
          \n\
-         ---@alias MyPrompt.Segment { [1]: string, [2]: string }"
+         ---@alias Peter.Segment { [1]: string, [2]: string }"
         .to_string()
 }
 
@@ -79,8 +80,8 @@ impl Registry {
             .join("|");
 
         format!(
-            "{}\n{}\n\n---@alias MyPrompt.ComponentName {name_union}\n\n\
-     {}\n---@param name MyPrompt.ComponentName\n---@return any\nfunction _G.get_component(name) end\n",
+            "{}\n{}\n\n---@alias Peter.ComponentName {name_union}\n\n\
+     {}\n---@param name Peter.ComponentName\n---@return any\nfunction _G.get_component(name) end\n",
             header(),
             class_blocks.join("\n\n"),
             overload_lines.join("\n"),

@@ -115,25 +115,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "my_prompt"
-version = "0.1.0"
-dependencies = [
- "mlua",
- "my_prompt_macros",
- "serde",
- "unicode-width",
-]
-
-[[package]]
-name = "my_prompt_macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -172,6 +153,25 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "peter_prompt"
+version = "0.1.0"
+dependencies = [
+ "mlua",
+ "peter_prompt_macros",
+ "serde",
+ "unicode-width",
+]
+
+[[package]]
+name = "peter_prompt_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

@@ -75,7 +75,7 @@ fn main() -> mlua::Result<()> {
     registry.register(Box::new(components::lua::component()));
     registry.register(Box::new(components::rust::component()));
 
-    // `my_prompt --generate-annotations [output_path]` writes the
+    // `peter --generate-annotations [output_path]` writes the
     // LuaCATS type stubs for every registered component and exits,
     // rather than rendering a prompt. Kept as an early special case
     // (not folded into the normal arg parsing below, which assumes
@@ -125,7 +125,7 @@ fn main() -> mlua::Result<()> {
     lua.globals().set("term_width", ctx.term_width)?;
 
     let home_dir = env::var("HOME").expect("HOME environment variable must be set");
-    let init_path = PathBuf::from(home_dir).join(".config/my_prompt/init.lua");
+    let init_path = PathBuf::from(home_dir).join(".config/peter/init.lua");
 
     let prompt_string: String = if init_path.exists() {
         let lua_code = fs::read_to_string(init_path).unwrap_or_default();

@@ -1,5 +1,5 @@
 [package]
-name = "my_prompt"
+name = "peter_prompt"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,4 +7,4 @@ edition = "2024"
 mlua = { version = "0.12", features = ["luajit", "serde"] }
 serde = { version = "1", features = ["derive"] }
 unicode-width = "0.2.2"
-my_prompt_macros = { path = "my_prompt_macros" }
+peter_prompt_macros = { path = "peter_prompt_macros" }
