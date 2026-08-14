@@ -110,6 +110,16 @@ fn main() -> mlua::Result<()> {
 
     let lua = Lua::new();
 
+    let globals = lua.globals();
+    let package: mlua::Table = globals.get("package")?;
+    let current_path: String = package.get("path")?;
+
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let custom_path = format!("{}/lua/?.lua", manifest_dir.replace("\\", "/"));
+
+    let new_path = format!("{};{}", current_path, custom_path);
+    package.set("path", new_path)?;
+
     let get_cwd = lua.create_function(|_, ()| {
         let cwd = env::current_dir().unwrap_or_default();
         Ok(cwd.to_string_lossy().into_owned())
