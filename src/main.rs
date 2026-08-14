@@ -65,6 +65,66 @@ fn skip_escape_sequence(chars: &mut std::iter::Peekable<impl Iterator<Item = cha
     }
 }
 
+struct RenderArgs {
+    last_status: i32,
+    bind_mode: String,
+    is_transient: bool,
+    columns: usize,
+}
+
+fn parse_render_args(args: &[String]) -> RenderArgs {
+    let mut last_status = 0;
+    let mut columns = 0;
+    let mut bind_mode = String::from("insert");
+    let mut is_transient = false;
+
+    for arg in args {
+        if let Some(value) = arg.strip_prefix("--last-status=") {
+            last_status = value.parse().unwrap_or(0);
+        } else if let Some(value) = arg.strip_prefix("--columns=") {
+            columns = value.parse().unwrap_or(0);
+        } else if let Some(value) = arg.strip_prefix("--bind-mode=") {
+            bind_mode = value.to_string();
+        } else if arg == "--transient" {
+            is_transient = true;
+        }
+    }
+
+    RenderArgs {
+        last_status,
+        bind_mode,
+        is_transient,
+        columns,
+    }
+}
+
+fn print_init_snippet(shell: &str) -> bool {
+    match shell {
+        "fish" => {
+            print!(
+                r#"set -g fish_transient_prompt 1
+ 
+function fish_mode_prompt
+    # hide vi mode indicator - peter_prompt draws its own
+end
+ 
+function fish_prompt
+    set -l last_status $status
+ 
+    if contains -- --final-rendering $argv
+        peter_prompt --last-status=$last_status --bind-mode=$fish_bind_mode --columns=$COLUMNS --transient
+    else
+        peter_prompt --last-status=$last_status --bind-mode=$fish_bind_mode --columns=$COLUMNS
+    end
+end
+"#
+            );
+            true
+        }
+        _ => todo!(),
+    }
+}
+
 fn main() -> mlua::Result<()> {
     let start = Instant::now();
     let args: Vec<String> = env::args().collect();
@@ -81,31 +141,38 @@ fn main() -> mlua::Result<()> {
     // (not folded into the normal arg parsing below, which assumes
     // args[1] is an integer last_status) since this is a one-off dev
     // command, not something the shell invokes on every prompt render.
-    if args.get(1).map(String::as_str) == Some("--generate-annotations") {
-        let annotations = registry.generate_lua_annotations();
-        match args.get(2) {
-            Some(path) => {
-                fs::write(path, annotations).map_err(|e| {
-                    mlua::Error::RuntimeError(format!("failed to write {path}: {e}"))
-                })?;
-                eprintln!("wrote annotations to {path}");
+    match args.get(1).map(String::as_str) {
+        Some("generate-annotations") => {
+            let annotations = registry.generate_lua_annotations();
+            match args.get(2) {
+                Some(path) => {
+                    fs::write(path, annotations).map_err(|e| {
+                        mlua::Error::RuntimeError(format!("failed to write {path}: {e}"))
+                    })?;
+                    eprintln!("wrote annotations to {path}");
+                }
+                None => print!("{annotations}"),
             }
-            None => print!("{annotations}"),
+            return Ok(());
         }
-        return Ok(());
+        Some("init") => {
+            let shell = args.get(2).map(String::as_str).unwrap_or("");
+            if !print_init_snippet(shell) {
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+        _ => {}
     }
 
-    let last_status: i32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
-    let bind_mode = args.get(2).cloned().unwrap_or_else(|| "insert".to_string());
-    let term_width: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(80);
-    let is_transient = args.get(4).is_some_and(|s| s == "transient");
+    let render_args = parse_render_args(&args[1..]);
 
     let ctx = Context {
         cwd: env::current_dir().unwrap_or_default(),
-        term_width,
-        last_status,
-        bind_mode,
-        is_transient,
+        term_width: render_args.columns,
+        last_status: render_args.last_status,
+        bind_mode: render_args.bind_mode,
+        is_transient: render_args.is_transient,
     };
 
     let lua = Lua::new();
