@@ -2,10 +2,26 @@
 name = "peter_prompt"
 version = "0.1.0"
 edition = "2024"
+license-file = "LICENSE"
+homepage = "https://github.com/max397574/peter"
+repository = "https://github.com/max397574/peter"
+readme = "readme.md"
+description = "A cross-platform prompt configured with lua"
 
 [dependencies]
 mlua = { version = "0.12", features = ["luajit", "serde"] }
 serde = { version = "1", features = ["derive"] }
 unicode-width = "0.2.2"
-peter_prompt_macros = { path = "peter_prompt_macros" }
+peter_prompt_macros = { version = "0.1.0", path = "peter_prompt_macros" }
 cross-xdg = "2.1.1"
+
+[workspace]
+members = [
+    ".",
+    "peter_prompt_macros",
+]
+
+[workspace.package]
+license-file = "LICENSE"
+homepage = "https://github.com/max397574/peter"
+repository = "https://github.com/max397574/peter"
