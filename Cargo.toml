@@ -8,3 +8,4 @@ mlua = { version = "0.12", features = ["luajit", "serde"] }
 serde = { version = "1", features = ["derive"] }
 unicode-width = "0.2.2"
 peter_prompt_macros = { path = "peter_prompt_macros" }
+cross-xdg = "2.1.1"

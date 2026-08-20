@@ -41,6 +41,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
+name = "cross-xdg"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a2c3eba735b0ffa1d092ed87f90066d60494435e3567d205e7c3378c0893ef4"
+
+[[package]]
 name = "either"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -159,6 +165,7 @@ dependencies = [
 name = "peter_prompt"
 version = "0.1.0"
 dependencies = [
+ "cross-xdg",
  "mlua",
  "peter_prompt_macros",
  "serde",

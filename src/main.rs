@@ -1,8 +1,10 @@
 use mlua::Lua;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Instant;
+
+use cross_xdg::BaseDirs;
 
 use unicode_width::UnicodeWidthChar;
 
@@ -135,12 +137,6 @@ fn main() -> mlua::Result<()> {
     registry.register(Box::new(components::lua::component()));
     registry.register(Box::new(components::rust::component()));
 
-    // `peter --generate-annotations [output_path]` writes the
-    // LuaCATS type stubs for every registered component and exits,
-    // rather than rendering a prompt. Kept as an early special case
-    // (not folded into the normal arg parsing below, which assumes
-    // args[1] is an integer last_status) since this is a one-off dev
-    // command, not something the shell invokes on every prompt render.
     match args.get(1).map(String::as_str) {
         Some("generate-annotations") => {
             let annotations = registry.generate_lua_annotations();
@@ -201,20 +197,34 @@ fn main() -> mlua::Result<()> {
     lua.globals().set("is_transient", ctx.is_transient)?;
     lua.globals().set("term_width", ctx.term_width)?;
 
-    let home_dir = env::var("HOME").expect("HOME environment variable must be set");
-    let init_path = PathBuf::from(home_dir).join(".config/peter/init.lua");
+    let prompt_string = if let Ok(base_dirs) = BaseDirs::new() {
+        let user_config_path = base_dirs.config_home().join("peter").join("init.lua");
+        let fallback_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("default_config.lua");
 
-    let prompt_string: String = if init_path.exists() {
-        let lua_code = fs::read_to_string(init_path).unwrap_or_default();
-        registry::run_config(&lua, &mut registry, &ctx, &lua_code, display_width)?
+        let config_code = if user_config_path.exists() {
+            fs::read_to_string(&user_config_path)
+        } else {
+            fs::read_to_string(&fallback_path)
+        };
+
+        match config_code {
+            Ok(lua_code) => {
+                match registry::run_config(&lua, &mut registry, &ctx, &lua_code, display_width) {
+                    Ok(prompt) => prompt,
+                    Err(e) => format!("\x1b[31;1m[peter lua error: {}]\x1b[0m \u{276f} ", e),
+                }
+            }
+            Err(e) => {
+                format!("\x1b[31;1m[peter config error: {}]\x1b[0m \u{276f} ", e)
+            }
+        }
     } else {
-        String::from("\x1b[31m(config missing)\x1b[0m \u{276f} ")
+        String::from("\x1b[31;1m[peter error: OS config directory missing]\x1b[0m \u{276f} ")
     };
 
     let execution_time = start.elapsed();
-    let prompt_string = prompt_string.replace("EXECUTION_TIME", &format!("{:?}", execution_time));
+    let final_prompt = prompt_string.replace("EXECUTION_TIME", &format!("{:?}", execution_time));
 
-    print!("{prompt_string}");
-
+    print!("{final_prompt}");
     Ok(())
 }
