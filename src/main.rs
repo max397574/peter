@@ -106,14 +106,14 @@ fn print_init_snippet(shell: &str) -> bool {
         "fish" => {
             print!(
                 r#"set -g fish_transient_prompt 1
- 
+
 function fish_mode_prompt
     # hide vi mode indicator - peter_prompt draws its own
 end
- 
+
 function fish_prompt
     set -l last_status $status
- 
+
     if contains -- --final-rendering $argv
         peter_prompt --last-status=$last_status --bind-mode=$fish_bind_mode --columns=$COLUMNS --transient
     else
@@ -124,7 +124,51 @@ end
             );
             true
         }
-        _ => todo!(),
+        "zsh" => {
+            print!(
+                r#"_peter_prompt_status=0
+
+peter_prompt_precmd() {{
+    _peter_prompt_status=$?
+    PROMPT="$(peter_prompt --last-status=$_peter_prompt_status --bind-mode=${{KEYMAP:-main}} --columns=${{COLUMNS:-80}})"
+}}
+
+peter_prompt_line_finish() {{
+    PROMPT="$(peter_prompt --last-status=$_peter_prompt_status --bind-mode=${{KEYMAP:-main}} --columns=${{COLUMNS:-80}} --transient)"
+    zle reset-prompt
+}}
+
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd peter_prompt_precmd
+
+zle -N zle-line-finish peter_prompt_line_finish
+
+zle-keymap-select() {{
+    PROMPT="$(peter_prompt --last-status=$_peter_prompt_status --bind-mode=${{KEYMAP:-main}} --columns=${{COLUMNS:-80}})"
+    zle reset-prompt
+}}
+zle -N zle-keymap-select
+"#
+            );
+            true
+        }
+        "bash" => {
+            print!(
+                r#"peter_prompt_ps1() {{
+    local last_status=$?
+    PS1="$(peter_prompt --last-status=$last_status --columns=${{COLUMNS:-80}})"
+}}
+
+if [[ -z "$PROMPT_COMMAND" ]]; then
+    PROMPT_COMMAND=peter_prompt_ps1
+elif [[ "$PROMPT_COMMAND" != *peter_prompt_ps1* ]]; then
+    PROMPT_COMMAND="peter_prompt_ps1; $PROMPT_COMMAND"
+fi
+"#
+            );
+            true
+        }
+        _ => false,
     }
 }
 
