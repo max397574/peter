@@ -9,7 +9,7 @@ readme = "readme.md"
 description = "A cross-platform prompt configured with lua"
 
 [dependencies]
-mlua = { version = "0.12", features = ["luajit", "serde"] }
+mlua = { version = "0.12", features = ["luajit", "serde", "vendored"] }
 serde = { version = "1", features = ["derive"] }
 unicode-width = "0.2.2"
 peter_prompt_macros = { version = "0.1.0", path = "peter_prompt_macros" }
