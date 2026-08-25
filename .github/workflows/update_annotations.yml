@@ -16,7 +16,7 @@ jobs:
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
       - name: Generate annotations
-        run: cargo run --release --bin peter_proompt -- generate-annotations > annotations.lua
+        run: cargo run --release --bin peter_prompt -- generate-annotations > annotations.lua
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
