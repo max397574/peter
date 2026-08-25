@@ -69,12 +69,30 @@ function _G.displaywidth(text) end
 ---@field render fun(data: Peter.Rust.Data): Peter.Segment[]
 
 
----@alias Peter.ComponentName "jj"|"cwd"|"lua"|"rust"
+---@class Peter.Git.Config
+
+---@class Peter.Git.Data
+---@field branch string Current branch name
+---@field commit_hash string Short commit hash of HEAD
+---@field repo_state string? Current special state: "REBASING", "MERGING", "CHERRY-PICKING", "BISECTING", or "REVERTING"
+---@field ahead integer Commits ahead of upstream branch
+---@field behind integer Commits behind upstream branch
+---@field insertions integer Lines added
+---@field deletions integer Lines removed
+---@field files_changed integer Number of files with changes vs HEAD
+
+---@class Peter.Git.Component
+---@field config Peter.Git.Config
+---@field render fun(data: Peter.Git.Data): Peter.Segment[]
+
+
+---@alias Peter.ComponentName "jj"|"cwd"|"lua"|"rust"|"git"
 
 ---@overload fun(name: "jj"): Peter.Jj.Component
 ---@overload fun(name: "cwd"): Peter.Cwd.Component
 ---@overload fun(name: "lua"): Peter.Lua.Component
 ---@overload fun(name: "rust"): Peter.Rust.Component
+---@overload fun(name: "git"): Peter.Git.Component
 ---@param name Peter.ComponentName
 ---@return any
 function _G.get_component(name) end
