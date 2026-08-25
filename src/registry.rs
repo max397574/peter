@@ -62,12 +62,6 @@ impl Registry {
         self.components.insert(name, component);
     }
 
-    /// Registers an `@`-prefixed group, e.g. `register_group("@vcs",
-    /// GroupKind::FirstOf, vec!["jj".into(), "git".into()])`. Call this
-    /// after registering every member component - each member is
-    /// checked to exist yet (debug builds only; this is a programmer
-    /// error, not user input, so it's a debug_assert rather than a
-    /// returned Result that every call site would need to handle).
     pub fn register_group(&mut self, name: &str, kind: GroupKind, members: Vec<String>) {
         debug_assert!(
             name.starts_with('@'),
@@ -223,15 +217,6 @@ struct RenderedChunk {
     align_right: bool,
 }
 
-/// Renders one component by name and splits its output into `lines`,
-/// respecting embedded newlines and the current alignment side. Shared
-/// by the plain-component case and by both group kinds below, so the
-/// newline-splitting/alignment-tagging logic exists in exactly one
-/// place. Returns `Ok(true)` if the component was enabled and something
-/// was rendered, `Ok(false)` if it was skipped because it's currently
-/// disabled - `GroupKind::FirstOf` uses this to know when to stop
-/// trying further members, without a separate (and possibly costly,
-/// since `is_enabled` can do filesystem I/O) enabled check of its own.
 fn render_component_into_lines(
     name: &str,
     registry: &Registry,
@@ -260,7 +245,7 @@ fn render_component_into_lines(
             }
             NewlinePart::Newline => {
                 lines.push(Vec::new());
-                *align_right = false; // alignment doesn't carry across lines
+                *align_right = false;
             }
         }
     }
