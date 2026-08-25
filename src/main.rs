@@ -136,12 +136,13 @@ fn main() -> mlua::Result<()> {
     registry.register(Box::new(components::jj::component()));
     registry.register(Box::new(components::cwd::component()));
     registry.register(Box::new(components::lua::component()));
+    registry.register(Box::new(components::python::component()));
     registry.register(Box::new(components::rust::component()));
     registry.register(Box::new(components::git::component()));
     registry.register_group(
         "@versions",
         GroupKind::All,
-        vec!["lua".to_string(), "rust".to_string()],
+        vec!["lua".to_string(), "rust".to_string(), "python".to_string()],
     );
     registry.register_group(
         "@vcs",

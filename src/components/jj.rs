@@ -65,7 +65,7 @@ fn get_jj_data(_ctx: &Context, _config: &()) -> Option<JJData> {
         .output();
 
     let mut change_id = String::from("????");
-    let mut description = String::from("(no description set)");
+    let mut description = String::from("(no desc set)");
 
     if let Ok(output) = log_output {
         let stdout = String::from_utf8_lossy(&output.stdout);
