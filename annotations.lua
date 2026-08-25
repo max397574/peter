@@ -59,6 +59,16 @@ function _G.displaywidth(text) end
 ---@field render fun(data: Peter.Lua.Data): Peter.Segment[]
 
 
+---@class Peter.Python.Config
+
+---@class Peter.Python.Data
+---@field version string
+
+---@class Peter.Python.Component
+---@field config Peter.Python.Config
+---@field render fun(data: Peter.Python.Data): Peter.Segment[]
+
+
 ---@class Peter.Rust.Config
 
 ---@class Peter.Rust.Data
@@ -86,11 +96,12 @@ function _G.displaywidth(text) end
 ---@field render fun(data: Peter.Git.Data): Peter.Segment[]
 
 
----@alias Peter.ComponentName "jj"|"cwd"|"lua"|"rust"|"git"
+---@alias Peter.ComponentName "jj"|"cwd"|"lua"|"python"|"rust"|"git"
 
 ---@overload fun(name: "jj"): Peter.Jj.Component
 ---@overload fun(name: "cwd"): Peter.Cwd.Component
 ---@overload fun(name: "lua"): Peter.Lua.Component
+---@overload fun(name: "python"): Peter.Python.Component
 ---@overload fun(name: "rust"): Peter.Rust.Component
 ---@overload fun(name: "git"): Peter.Git.Component
 ---@param name Peter.ComponentName
