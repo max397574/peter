@@ -1,0 +1,21 @@
+name: Check Annotations
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  check-annotations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Regenerate annotations
+        run: cargo run --release --bin peter_proompt -- generate-annotations > annotations.lua
+      - name: Verify annotations are up to date
+        run: |
+          if ! git diff --exit-code annotations.lua; then
+            echo "::error::annotations.lua is out of date! Please run 'cargo run --bin peter_proompt -- generate-annotations > annotations.lua' and commit the result."
+            exit 1
+          fi

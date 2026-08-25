@@ -1,0 +1,28 @@
+name: Update Annotations
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  update-annotations:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Generate annotations
+        run: cargo run --release --bin peter_proompt -- generate-annotations > annotations.lua
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update annotations.lua"
+          title: "chore: update annotations.lua"
+          body: "Automated PR generated to update `annotations.lua` to the latest executable output."
+          branch: "automation/update-annotations"
+          delete-branch: true

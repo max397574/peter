@@ -27,6 +27,7 @@ peter_prompt init fish | source
 There is a default configuration under `default_config.lua`. See there for the
 format of new components and modifying components.
 
-You put custom configuration under `~/.config/peter/init.lua`. You can generate
-annotations using `peter_prompt generate-annotations` for a better UX when
-configuring.
+You put custom configuration under `~/.config/peter/init.lua`. There are
+luaCATS annotations under `annotations.lua` for the components and provided lua
+api. This should be up to date after a new release. You also can generate the
+annotations using `peter_prompt generate-annotations`.
