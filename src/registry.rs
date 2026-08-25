@@ -4,9 +4,20 @@ use std::collections::HashMap;
 
 pub const ALIGN_MARKER: &str = "@align";
 
+pub enum GroupKind {
+    All,
+    FirstOf,
+}
+
+pub struct ComponentGroup {
+    kind: GroupKind,
+    members: Vec<String>,
+}
+
 pub struct Registry {
     components: HashMap<String, Box<dyn ErasedComponent>>,
     order: Vec<String>,
+    groups: HashMap<String, ComponentGroup>,
 }
 
 fn header() -> String {
@@ -39,6 +50,7 @@ impl Registry {
         Self {
             components: HashMap::new(),
             order: Vec::new(),
+            groups: HashMap::new(),
         }
     }
 
@@ -48,6 +60,26 @@ impl Registry {
             self.order.push(name.clone());
         }
         self.components.insert(name, component);
+    }
+
+    /// Registers an `@`-prefixed group, e.g. `register_group("@vcs",
+    /// GroupKind::FirstOf, vec!["jj".into(), "git".into()])`. Call this
+    /// after registering every member component - each member is
+    /// checked to exist yet (debug builds only; this is a programmer
+    /// error, not user input, so it's a debug_assert rather than a
+    /// returned Result that every call site would need to handle).
+    pub fn register_group(&mut self, name: &str, kind: GroupKind, members: Vec<String>) {
+        debug_assert!(
+            name.starts_with('@'),
+            "group name '{name}' should start with '@', matching ALIGN_MARKER's convention"
+        );
+        debug_assert!(
+            members.iter().all(|m| self.components.contains_key(m)),
+            "group '{name}' references a member component that isn't registered yet - \
+             register all real components before any group referencing them"
+        );
+        self.groups
+            .insert(name.to_string(), ComponentGroup { kind, members });
     }
 
     pub fn get(&self, name: &str) -> Option<&dyn ErasedComponent> {
@@ -104,6 +136,7 @@ fn make_snapshot_table(
 
 enum ReturnedEntry {
     Component { name: String },
+    Group { name: String },
     Align,
 }
 
@@ -123,6 +156,15 @@ fn apply_returned_components(
                 let name = s.to_str()?.to_string();
                 if name == ALIGN_MARKER {
                     order.push(ReturnedEntry::Align);
+                } else if name.starts_with('@') {
+                    if !registry.groups.contains_key(&name) {
+                        let known: Vec<&str> = registry.groups.keys().map(String::as_str).collect();
+                        return Err(mlua::Error::RuntimeError(format!(
+                            "'{name}' is not a known component group (known groups: {})",
+                            known.join(", ")
+                        )));
+                    }
+                    order.push(ReturnedEntry::Group { name });
                 } else {
                     if registry.get(&name).is_none() {
                         return Err(mlua::Error::RuntimeError(format!(
@@ -165,7 +207,7 @@ fn apply_returned_components(
 
             other => {
                 return Err(mlua::Error::RuntimeError(format!(
-                    "expected a component (table) or a component name / \"{ALIGN_MARKER}\" (string) in the returned list, got {}",
+                    "expected a component (table) or a component name / \"{ALIGN_MARKER}\" / a group name (string) in the returned list, got {}",
                     other.type_name()
                 )));
             }
@@ -179,6 +221,50 @@ struct RenderedChunk {
     text: String,
     width: usize,
     align_right: bool,
+}
+
+/// Renders one component by name and splits its output into `lines`,
+/// respecting embedded newlines and the current alignment side. Shared
+/// by the plain-component case and by both group kinds below, so the
+/// newline-splitting/alignment-tagging logic exists in exactly one
+/// place. Returns `Ok(true)` if the component was enabled and something
+/// was rendered, `Ok(false)` if it was skipped because it's currently
+/// disabled - `GroupKind::FirstOf` uses this to know when to stop
+/// trying further members, without a separate (and possibly costly,
+/// since `is_enabled` can do filesystem I/O) enabled check of its own.
+fn render_component_into_lines(
+    name: &str,
+    registry: &Registry,
+    ctx: &Context,
+    lua: &Lua,
+    display_width: &dyn Fn(&str) -> usize,
+    lines: &mut Vec<Vec<RenderedChunk>>,
+    align_right: &mut bool,
+) -> mlua::Result<bool> {
+    let component = registry.get(name).ok_or_else(|| {
+        mlua::Error::RuntimeError(format!("unknown component in result: '{name}'"))
+    })?;
+    if !component.is_enabled(ctx) {
+        return Ok(false);
+    }
+    let segments = component.render(ctx, lua)?;
+    for part in split_on_newlines(&render_segments(&segments)) {
+        match part {
+            NewlinePart::Text(text) => {
+                let width = display_width(&text);
+                lines.last_mut().unwrap().push(RenderedChunk {
+                    text,
+                    width,
+                    align_right: *align_right,
+                });
+            }
+            NewlinePart::Newline => {
+                lines.push(Vec::new());
+                *align_right = false; // alignment doesn't carry across lines
+            }
+        }
+    }
+    Ok(true)
 }
 
 pub fn run_config(
@@ -221,6 +307,7 @@ pub fn run_config(
         }
     };
 
+    let display_width: &dyn Fn(&str) -> usize = &display_width;
     let mut align_right = false;
     let mut lines: Vec<Vec<RenderedChunk>> = vec![Vec::new()];
 
@@ -228,26 +315,48 @@ pub fn run_config(
         match entry {
             ReturnedEntry::Align => align_right = true,
             ReturnedEntry::Component { name } => {
-                let component = registry.get(&name).ok_or_else(|| {
-                    mlua::Error::RuntimeError(format!("unknown component in result: '{name}'"))
+                render_component_into_lines(
+                    &name,
+                    registry,
+                    ctx,
+                    lua,
+                    display_width,
+                    &mut lines,
+                    &mut align_right,
+                )?;
+            }
+            ReturnedEntry::Group { name } => {
+                let group = registry.groups.get(&name).ok_or_else(|| {
+                    mlua::Error::RuntimeError(format!("unknown group in result: '{name}'"))
                 })?;
-                if !component.is_enabled(ctx) {
-                    continue;
-                }
-                let segments = component.render(ctx, lua)?;
-                for part in split_on_newlines(&render_segments(&segments)) {
-                    match part {
-                        NewlinePart::Text(text) => {
-                            let width = display_width(&text);
-                            lines.last_mut().unwrap().push(RenderedChunk {
-                                text,
-                                width,
-                                align_right,
-                            });
+                match group.kind {
+                    GroupKind::All => {
+                        for member_name in &group.members {
+                            render_component_into_lines(
+                                member_name,
+                                registry,
+                                ctx,
+                                lua,
+                                display_width,
+                                &mut lines,
+                                &mut align_right,
+                            )?;
                         }
-                        NewlinePart::Newline => {
-                            lines.push(Vec::new());
-                            align_right = false; // alignment doesn't carry across lines
+                    }
+                    GroupKind::FirstOf => {
+                        for member_name in &group.members {
+                            let rendered = render_component_into_lines(
+                                member_name,
+                                registry,
+                                ctx,
+                                lua,
+                                display_width,
+                                &mut lines,
+                                &mut align_right,
+                            )?;
+                            if rendered {
+                                break;
+                            }
                         }
                     }
                 }

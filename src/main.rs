@@ -13,6 +13,7 @@ mod components;
 mod registry;
 
 use component::Context;
+use registry::GroupKind;
 use registry::Registry;
 
 pub fn display_width(s: &str) -> usize {
@@ -136,6 +137,17 @@ fn main() -> mlua::Result<()> {
     registry.register(Box::new(components::cwd::component()));
     registry.register(Box::new(components::lua::component()));
     registry.register(Box::new(components::rust::component()));
+    registry.register(Box::new(components::git::component()));
+    registry.register_group(
+        "@versions",
+        GroupKind::All,
+        vec!["lua".to_string(), "rust".to_string()],
+    );
+    registry.register_group(
+        "@vcs",
+        GroupKind::FirstOf,
+        vec!["jj".to_string(), "git".to_string()],
+    );
 
     match args.get(1).map(String::as_str) {
         Some("generate-annotations") => {

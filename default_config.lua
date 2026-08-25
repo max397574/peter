@@ -39,4 +39,4 @@ local function space(n)
     }
 end
 
-return { cwd_component, space(1), "jj", "lua", "rust", "@align", clock_component, symbol_component }
+return { cwd_component, space(1), "@vcs", "@versions", "@align", clock_component, symbol_component }
